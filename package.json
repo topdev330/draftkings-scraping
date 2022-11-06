@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "csv-writer": "^1.6.0",
+    "google-spreadsheet": "^3.3.0",
+    "puppeteer": "^18.2.1"
+  }
+}
