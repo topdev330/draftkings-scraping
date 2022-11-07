@@ -1,5 +1,7 @@
 const puppeteer = require('puppeteer');
+const fs =  require('fs');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
+var moment = require('moment');
 const gSheetDoc = new GoogleSpreadsheet('1MNLpkRmJ62YQRLvrBEV_1wrqn6B3FP8UnbFo-sZhMsg');
 const creds = require('./sheetsCred.json');
 
@@ -34,6 +36,7 @@ async function scrapping(gSheetDoc, page) {
 		var teamProps_sheet = gSheetDoc.sheetsById[1451968654];
 		await writeToGSheet(teamProps_sheet, teamPropsData);
 
+
 	} catch(err) {
 		console.log("==========>", err);
 		setTimeout(function() {
@@ -43,7 +46,7 @@ async function scrapping(gSheetDoc, page) {
 }
 
 async function writeToGSheet(gSheet, rows) {
-	await gSheet.clearRows({start: 3}); 
+	await gSheet.clearRows({start: 2}); 
 	await gSheet.addRows(rows);
 }
 
@@ -51,22 +54,30 @@ async function moneyline(page) {
 	await page.click('a[id="game_category_Game Lines"]');
 	await page.waitForSelector('div[aria-labelledby="game_category_Game Lines"] table.sportsbook-table');
 	await new Promise((resolve) => setTimeout(resolve, 1000 * 1));
-
-	var gameData = await page.evaluate(() => {
+	var gameData = await page.evaluate(async () => {
 		var resData = {spread: [], total: [], moneyline: []};
 		var tables = document.querySelectorAll('div[aria-labelledby="game_category_Game Lines"] table.sportsbook-table');
 		for(var k = 0; k < tables.length; k++) {
 			var table = tables[k];
+			var date = table.querySelector("thead tr th div.sportsbook-table-header__title span").innerText;
+			
 			var trs = table.querySelectorAll("tbody tr");
-			var pName, line, overOdds, underOdds;
 			for(var i = 0; i < trs.length; i++) {
+				var time;
+				if(trs[i].querySelector("span.event-cell__start-time")) {
+					time = trs[i].querySelector("span.event-cell__start-time").textContent;
+				} else {
+					time = trs[i].querySelector("span.event-cell__time").textContent;
+				}
+				var timeStr =dateSomeChangeFunc(date, time);
+
 				var pName = trs[i].querySelector('div.event-cell__name-text').textContent;
 				var lines = trs[i].querySelectorAll('span.sportsbook-outcome-cell__line');
 				var total_line_label = trs[i].querySelector('span.sportsbook-outcome-cell__label').textContent;
 				var odds = trs[i].querySelectorAll('span.sportsbook-odds');
-				resData.spread.push({pName: pName, line: lines[0].textContent, odds: odds[0].textContent})
-				resData.total.push({pName: pName, line: total_line_label + " " + lines[1].textContent, odds: odds[1].textContent})
-				resData.moneyline.push({pName: pName, odds: odds[2].textContent})
+				resData.spread.push({time: timeStr, pName: pName, line: lines[0].textContent, odds: odds[0].textContent})
+				resData.total.push({time: timeStr, pName: pName, line: total_line_label + " " + lines[1].textContent, odds: odds[1].textContent})
+				resData.moneyline.push({time: timeStr, pName: pName, odds: odds[2].textContent})
 			}
 		}
 		return resData;
@@ -84,9 +95,23 @@ async function teamProps(page) {
 
 	var gameData = await page.evaluate((idName) => {
 		var resultArr = [];
-		var tables = document.querySelectorAll('div[aria-labelledby="game_category_Team Props"] div.sportsbook-event-accordion__children-wrapper');
-		for(var k = 0; k < tables.length; k++) {
-			var table = tables[k];
+		var accordions = document.querySelectorAll(`div[aria-labelledby="game_category_Team Props"] div.sportsbook-event-accordion__wrapper`);
+
+		for(var k = 0; k < accordions.length; k++) {
+			if( !accordions[k].querySelector("div.sportsbook-event-accordion__title-wrapper")) continue;
+			var title = accordions[k].querySelector("div.sportsbook-event-accordion__title-wrapper").innerText.replace("\nat\n", " _VS_ ");
+			var dateString = accordions[k].querySelector("span.sportsbook-event-accordion__date").textContent;
+			var time = "";
+			if(dateString) {
+				var dateStr = dateString.split(" ")[0];
+				console.log('dateStr: ', dateStr);
+				var timeStr = dateString.split(" ")[1];
+				var date = dateSomeChangeFunc(dateStr, timeStr);
+				time = date
+			}
+
+			var table = accordions[k].querySelector("div.sportsbook-event-accordion__children-wrapper");
+
 			var trs = table.querySelectorAll("div.component-29");
 			for(var i = 0; i < trs.length; i++) {
 				var pName = trs[i].querySelector('p.participants').textContent;
@@ -94,7 +119,7 @@ async function teamProps(page) {
 				var odds = trs[i].querySelectorAll('span.sportsbook-odds');
 				var overOdds = odds[0].textContent;
 				var underOdds = odds[1].textContent;
-				resultArr.push({type: idName, pName: pName, line: line, overOdds: overOdds, underOdds: underOdds})
+				resultArr.push({time: time, match: title, type: idName, pName: pName, line: line, overOdds: overOdds, underOdds: underOdds})
 			}
 		}
 		return resultArr;
@@ -129,11 +154,26 @@ async function overUnder(page, catId, subcatArr) {
 		await new Promise((resolve) => setTimeout(resolve, 1000 * 1));
 		await page.waitForSelector(`div[aria-labelledby="${catId}"] table.sportsbook-table`);
 
-		var tabData = await page.evaluate((idName, catId) => {
+		var tabData = await page.evaluate(async (idName, catId) => {
+			
+
 			var resultArr = [];
-			var tables = document.querySelectorAll(`div[aria-labelledby="${catId}"] table.sportsbook-table`);
-			for(var k = 0; k < tables.length; k++) {
-				var table = tables[k];
+			var accordions = document.querySelectorAll(`div[aria-labelledby="${catId}"] div.sportsbook-event-accordion__wrapper`);
+			// var tables = document.querySelectorAll(`div[aria-labelledby="${catId}"] table.sportsbook-table`);
+			for(var k = 0; k < accordions.length; k++) {
+				var table = accordions[k].querySelector("table.sportsbook-table");
+				var title = accordions[k].querySelector("div.sportsbook-event-accordion__title-wrapper").innerText.replace("\nat\n", " _VS_ ");
+				var dateString = accordions[k].querySelector("span.sportsbook-event-accordion__date").textContent;
+				console.log('dateString: ', dateString);
+				var time = "";
+				if(dateString) {
+					var dateStr = dateString.split(" ")[0];
+					console.log('dateStr: ', dateStr);
+					var timeStr = dateString.split(" ")[1];
+					var date = dateSomeChangeFunc(dateStr, timeStr);
+					time = date;
+				}
+
 				var trs = table.querySelectorAll("tbody tr");
 				var pName, line, overOdds, underOdds;
 				for(var i = 0; i < trs.length; i++) {
@@ -142,7 +182,7 @@ async function overUnder(page, catId, subcatArr) {
 					odds = trs[i].querySelectorAll('span.sportsbook-odds');
 					overOdds = odds[0].textContent;
 					underOdds = odds[1].textContent;
-					resultArr.push({type: idName, pName: pName, line: line, overOdds: overOdds, underOdds: underOdds})
+					resultArr.push({time: time, match: title, type: idName, pName: pName, line: line, overOdds: overOdds, underOdds: underOdds})
 				}
 			}
 			return resultArr;
@@ -153,8 +193,6 @@ async function overUnder(page, catId, subcatArr) {
 	}
 	return oddsData;
 }
-
-
 
 (async () => {
 	await gSheetDoc.useServiceAccountAuth(creds);
@@ -167,7 +205,9 @@ async function overUnder(page, catId, subcatArr) {
   await page.goto('https://sportsbook.draftkings.com/leagues/football/nfl', {
 		waitUntil: 'domcontentloaded',
   });
-  // passing props ===================================
+
+	await page.evaluate(fs.readFileSync("./moment.js", 'utf8'));
+	await page.evaluate(fs.readFileSync("./content.js", 'utf8'));
 	await scrapping(gSheetDoc, page);
-	browser.close();
+	// browser.close();
 })();
