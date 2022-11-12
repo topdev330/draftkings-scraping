@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const fs =  require('fs');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 var moment = require('moment');
-const gSheetDoc = new GoogleSpreadsheet('1MNLpkRmJ62YQRLvrBEV_1wrqn6B3FP8UnbFo-sZhMsg');
+const gSheetDoc = new GoogleSpreadsheet('1YUIqJF2DjYj-Ar0KyFla-vfGnJe1ed5p3E4fRwOrjwI');
 const creds = require('./sheetsCred.json');
 
 console.log("=============STARTED============");
@@ -20,11 +20,11 @@ async function scrapping(gSheetDoc, page) {
 		var money_sheet = gSheetDoc.sheetsById[1409990047];
 		await writeToGSheet(money_sheet, moneylineData.moneyline);
 		
-		var passing = await overUnder(page, "game_category_Passing Props", ['Pass TDs', 'Pass Yds', 'Pass + Rush Yds', 'Interceptions', 'Pass Completions'])
+		var passing = await overUnder(page, "game_category_Passing Props", ['Pass TDs', 'Pass Yds', 'Interceptions', 'Pass Completions'])
 		var passing_sheet = gSheetDoc.sheetsById[485258135];
 		await writeToGSheet(passing_sheet, passing);
 
-		var rec = await overUnder(page, "game_category_Rush/Rec Props", ['Rush Yds', 'Rec Yds', 'Receptions', 'Rush + Rec Yds'])
+		var rec = await overUnder(page, "game_category_Rush/Rec Props", ['Rush Yds', 'Rec Yds', 'Receptions'])
 		var rec_sheet = gSheetDoc.sheetsById[945683983];
 		await writeToGSheet(rec_sheet, rec);
 
@@ -32,9 +32,9 @@ async function scrapping(gSheetDoc, page) {
 		var dst_sheet = gSheetDoc.sheetsById[460653605];
 		await writeToGSheet(dst_sheet, dst);
 
-		var teamPropsData = await teamProps(page);
+/* 		var teamPropsData = await teamProps(page);
 		var teamProps_sheet = gSheetDoc.sheetsById[1451968654];
-		await writeToGSheet(teamProps_sheet, teamPropsData);
+		await writeToGSheet(teamProps_sheet, teamPropsData); */
 
 
 	} catch(err) {
@@ -46,7 +46,7 @@ async function scrapping(gSheetDoc, page) {
 }
 
 async function writeToGSheet(gSheet, rows) {
-	await gSheet.clearRows({start: 2}); 
+	// await gSheet.clearRows({start: 2}); 
 	await gSheet.addRows(rows);
 }
 
@@ -62,22 +62,32 @@ async function moneyline(page) {
 			var date = table.querySelector("thead tr th div.sportsbook-table-header__title span").innerText;
 			
 			var trs = table.querySelectorAll("tbody tr");
+			let preivousTeamNameTemp = null;
 			for(var i = 0; i < trs.length; i++) {
+				if(!trs[i].querySelector("a.toggle-sgp-badge__nav-link")) continue;
 				var time;
 				if(trs[i].querySelector("span.event-cell__start-time")) {
 					time = trs[i].querySelector("span.event-cell__start-time").textContent;
 				} else {
 					time = trs[i].querySelector("span.event-cell__time").textContent;
 				}
-				var timeStr =dateSomeChangeFunc(date, time);
+				var timeStr =dateSomeChangeFunc("moneyline", date, time);
+				
 
 				var pName = trs[i].querySelector('div.event-cell__name-text').textContent;
+				var matchName = null;
+				if(!preivousTeamNameTemp) {
+					matchName = pName + " @ " + trs[i+1].querySelector('div.event-cell__name-text').textContent;
+				} else {
+					matchName = preivousTeamNameTemp + " @ " + pName
+				}
+				preivousTeamNameTemp = pName;
 				var lines = trs[i].querySelectorAll('span.sportsbook-outcome-cell__line');
 				var total_line_label = trs[i].querySelector('span.sportsbook-outcome-cell__label').textContent;
 				var odds = trs[i].querySelectorAll('span.sportsbook-odds');
-				resData.spread.push({time: timeStr, pName: pName, line: lines[0].textContent, odds: odds[0].textContent})
-				resData.total.push({time: timeStr, pName: pName, line: total_line_label + " " + lines[1].textContent, odds: odds[1].textContent})
-				resData.moneyline.push({time: timeStr, pName: pName, odds: odds[2].textContent})
+				resData.spread.push({match: matchName, time: timeStr, pName: pName, line: lines[0].textContent, odds: odds[0].textContent})
+				resData.total.push({match: matchName, time: timeStr, pName: pName, line: total_line_label + " " + lines[1].textContent, odds: odds[1].textContent})
+				resData.moneyline.push({match: matchName, time: timeStr, pName: pName, odds: odds[2].textContent})
 			}
 		}
 		return resData;
@@ -106,7 +116,7 @@ async function teamProps(page) {
 				var dateStr = dateString.split(" ")[0];
 				console.log('dateStr: ', dateStr);
 				var timeStr = dateString.split(" ")[1];
-				var date = dateSomeChangeFunc(dateStr, timeStr);
+				var date = dateSomeChangeFunc(null, dateStr, timeStr);
 				time = date
 			}
 
@@ -155,24 +165,23 @@ async function overUnder(page, catId, subcatArr) {
 		await page.waitForSelector(`div[aria-labelledby="${catId}"] table.sportsbook-table`);
 
 		var tabData = await page.evaluate(async (idName, catId) => {
-			
-
 			var resultArr = [];
 			var accordions = document.querySelectorAll(`div[aria-labelledby="${catId}"] div.sportsbook-event-accordion__wrapper`);
 			// var tables = document.querySelectorAll(`div[aria-labelledby="${catId}"] table.sportsbook-table`);
 			for(var k = 0; k < accordions.length; k++) {
+				if(!accordions[k].querySelector("a.toggle-sgp-badge__nav-link")) continue;
 				var table = accordions[k].querySelector("table.sportsbook-table");
-				var title = accordions[k].querySelector("div.sportsbook-event-accordion__title-wrapper").innerText.replace("\nat\n", " _VS_ ");
+				var title = accordions[k].querySelector("div.sportsbook-event-accordion__title-wrapper").innerText.replace("\nat\n", " @ ");
 				var dateString = accordions[k].querySelector("span.sportsbook-event-accordion__date").textContent;
 				console.log('dateString: ', dateString);
-				var time = "";
-				if(dateString) {
-					var dateStr = dateString.split(" ")[0];
-					console.log('dateStr: ', dateStr);
-					var timeStr = dateString.split(" ")[1];
-					var date = dateSomeChangeFunc(dateStr, timeStr);
-					time = date;
-				}
+				var time = dateSomeChangeFunc(null, dateString);
+				// if(dateString) {
+				// 	var dateStr = dateString.split(" ")[0];
+				// 	console.log('dateStr: ', dateStr);
+				// 	var timeStr = dateString.split(" ")[1];
+				// 	var date = dateSomeChangeFunc(dateStr, timeStr);
+				// 	time = date;
+				// }
 
 				var trs = table.querySelectorAll("tbody tr");
 				var pName, line, overOdds, underOdds;
@@ -209,5 +218,6 @@ async function overUnder(page, catId, subcatArr) {
 	await page.evaluate(fs.readFileSync("./moment.js", 'utf8'));
 	await page.evaluate(fs.readFileSync("./content.js", 'utf8'));
 	await scrapping(gSheetDoc, page);
-	// browser.close();
+	console.log("------END-------------");
+	browser.close();
 })();
