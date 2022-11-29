@@ -16,7 +16,7 @@ function dateSomeChangeFunc(type, dateStr, inputTime = "") {
   let currentDate = new Date();
   const zoneOffset = currentDate.getTimezoneOffset();
   resultTime = resultTime + " "+ hmTime; // + "_" + zoneOffset
-  resultTime = resultTime.toLowerCase();
+  resultTime = resultTime.toUpperCase();
   // if(resultTime.length) {
   //   var t1 = resultTime.replace("THU", "qqq");
   //   var t2 = t1.replace("TH", "");

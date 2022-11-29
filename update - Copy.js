@@ -66,16 +66,6 @@ async function updatePassTab(gSheetDoc, type, prtd, prtdNameArr) {
   }
 }
 
-function bestMatchTeamFun(teamStr, data) {
-  let matchNameArr = [];
-  for(let item of data) {
-    matchNameArr.push(item.match);
-  }
-  let bestMatch = stringSimilarity.findBestMatch(teamStr, matchNameArr);
-  let bstid = bestMatch.bestMatchIndex;
-  return data[bstid];
-}
-
 async function updateSMTab(gSheetDoc, type, data) { // spread & moneyline
   let sheetId = sheetList[type];
   let sheet = gSheetDoc.sheetsById[sheetId];
@@ -89,13 +79,8 @@ async function updateSMTab(gSheetDoc, type, data) { // spread & moneyline
     let team1 = tss[0].split(" ")[0];
     let team2 = tss[1].split(" ")[0];
     let teamStr = team1 + " @ " + team2;
-    // let bestMatchTeam = bestMatchTeamFun(teamStr, data);
-    
     for(let item of data) {
-      var matchSimilarity = stringSimilarity.compareTwoStrings(item.match, teamStr);
-      var pNamesimilarity = stringSimilarity.compareTwoStrings(item.pName, fRow.pName.split(" ")[0]);
-      // console.log("t===>", item.match, " , ", teamStr, " : ", item.pName, " , ", fRow.pName.split(" ")[0], "___", matchSimilarity, "__p__", pNamesimilarity);
-      if(matchSimilarity > 0.4 && pNamesimilarity > 0.4) {
+      if(item.match == teamStr && item.pName == fRow.pName.split(" ")[0]) {
         if(!item.score) continue;
         fRow.score = item.score;
         fRow.marked = 1;
@@ -118,13 +103,13 @@ async function updateTOTab(gSheetDoc, type, data) { // over/under
     let team1 = tss[0].split(" ")[0];
     let team2 = tss[1].split(" ")[0];
     let teamStr = team1 + " @ " + team2;
-
-    let bestMatchTeam = bestMatchTeamFun(teamStr, data);
-    if( bestMatchTeam) {
-      if(!bestMatchTeam.score) continue;
-      fRow.total = bestMatchTeam.score;
-      fRow.marked = 1;
-      await fRow.save();
+    for(let item of data) {
+      if(item.match == teamStr) {
+        if(!item.score) continue;
+        fRow.total = item.score;
+        fRow.marked = 1;
+        await fRow.save();
+      }
     }
   }
 }

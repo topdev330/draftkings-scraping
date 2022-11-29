@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const fs =  require('fs');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 var moment = require('moment');
-const gSheetDoc = new GoogleSpreadsheet('1YUIqJF2DjYj-Ar0KyFla-vfGnJe1ed5p3E4fRwOrjwI');
+const gSheetDoc = new GoogleSpreadsheet('1MNLpkRmJ62YQRLvrBEV_1wrqn6B3FP8UnbFo-sZhMsg');
 const creds = require('./sheetsCred.json');
 
 console.log("=============STARTED============");
@@ -46,7 +46,7 @@ async function scrapping(gSheetDoc, page) {
 }
 
 async function writeToGSheet(gSheet, rows) {
-	// await gSheet.clearRows({start: 2}); 
+	await gSheet.clearRows({start: 2}); 
 	await gSheet.addRows(rows);
 }
 
@@ -64,7 +64,10 @@ async function moneyline(page) {
 			var trs = table.querySelectorAll("tbody tr");
 			let preivousTeamNameTemp = null;
 			for(var i = 0; i < trs.length; i++) {
-				if(!trs[i].querySelector("a.toggle-sgp-badge__nav-link")) continue;
+				if(!trs[i].querySelector("a.toggle-sgp-badge__nav-link")) {
+					i++;
+					continue;
+				}
 				var time;
 				if(trs[i].querySelector("span.event-cell__start-time")) {
 					time = trs[i].querySelector("span.event-cell__start-time").textContent;
@@ -78,10 +81,12 @@ async function moneyline(page) {
 				var matchName = null;
 				if(!preivousTeamNameTemp) {
 					matchName = pName + " @ " + trs[i+1].querySelector('div.event-cell__name-text').textContent;
-				} else {
-					matchName = preivousTeamNameTemp + " @ " + pName
+					preivousTeamNameTemp = pName;
+				} else if(i%2 == 1){
+					matchName = preivousTeamNameTemp + " @ " + pName;
+					preivousTeamNameTemp = null;
 				}
-				preivousTeamNameTemp = pName;
+				
 				var lines = trs[i].querySelectorAll('span.sportsbook-outcome-cell__line');
 				var total_line_label = trs[i].querySelector('span.sportsbook-outcome-cell__label').textContent;
 				var odds = trs[i].querySelectorAll('span.sportsbook-odds');
